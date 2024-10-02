@@ -19,12 +19,14 @@ class SDS814XHD:
     def __init__(self, 
                  resource_name, 
                  log_level='INFO',
-                 log_format = '%(asctime)s %(levelname)s SDS814XHD: %(message)s',
+                 log_format = '%(asctime)s [%(levelname)s] SDS814XHD: %(message)s',
                  logger_obj=[] ):
         """
         Initialize the oscilloscope class and establish connection.
 
         :param resource_name: VISA resource name for the oscilloscope.
+        :param log_level: Level of logging for logger object.
+        :logger_obj: Logger object
         """ 
         self.LOG_FORMAT = log_format 
         if logger_obj:
@@ -121,6 +123,9 @@ class SDS814XHD:
             self.logger.error(f'Error retrieving the number of points: {e}')
 
     def read_preamble(self):
+        """
+        Read preamble string as a bitstream and parse it to save as the classes' fields.
+        """
         try:
             # Retrieve the preamble block (e.g., scaling factors) as bitstream 
             self.logger.debug('Requesting preamble with the oscilloscope parameters.')
@@ -151,6 +156,8 @@ class SDS814XHD:
             self.source_channel = struct.unpack('h', preamble[n_skip+344:n_skip+345+1])[0] # Wave source. 0-C1,1-C2,2-C3,3-C4,4-C5,5-C6,6-C7,7-C8
             self.logger.debug('Unpacked the preamble bitstream.')
 
+            self.timebase = self.TIMEBASE_LIST[self.timebase_idx]
+
             self.logger.debug(f'\n\tFirst point: {self.first_point}\n\t'
                                 f'Number of points: {self.num_points}\n\t'
                                 f'Data interval: {self.data_interval}\n\t'
@@ -161,11 +168,11 @@ class SDS814XHD:
     
     def get_preamble_dict(self):
         """
-        Read the preamble string containing the parameters of the oscilloscope.
-        The preamble is read as a binary string, properly parsed and returned as dictionary.
+        Takes the oscilloscope parameters updated using the 'read_preamble()' method 
+        and forms a dictionary.
 
 
-        :return: Dictionary of the oscilloscope parameters.
+        :return: Dictionary of the oscilloscope's parameters.
         """
         preamble_dict = {
             'Number of points' : self.num_points,
@@ -190,16 +197,42 @@ class SDS814XHD:
         }
         return preamble_dict
     
-    def get_waveform_data(self):
+    def _convert_data(self, raw_values):
+        """
+        The function converts raw bitstream of the waveform and converts it to voltage samples. 
+        Additionally, it creates a properly scaled array of time samples.
+
+        :param raw_values: A bitstream of raw waveform values.
+        :return: Two arrays of for time samples and voltage samples.
+        """
+        if raw_values.size > 0:
+            horizontal_grid_num = 10 # Specific for SDS800X HD model line
+            voltage_levels = np.array(raw_values, dtype=np.float32)
+            voltage_data = voltage_levels*(self.vertical_gain / self.code_per_div) - self.vertical_offset
+            time_data = self.horizontal_offset - 0.5*horizontal_grid_num * self.timebase + np.arange(self.num_points)*self.horizontal_interval
+            self.logger.debug('Conversion successful.')
+            self.logger.debug(f'Voltage and time array lengths: {len(voltage_data)}, {len(time_data)}')
+            return time_data, voltage_data
+        else:
+            self.logger.error('Raw data conversion failed. Received an empty waveform bitstream.')
+            return None
+    
+    def get_waveform(self, update = True):
         """
         Retrieve the waveform data from the selected channel.
-
+        
+        :param update: Boolean flag. If true, then current parameters are read and stored in the class' fields.
         :return: Two numpy arrays containing time and voltage readings.
         """
         if not self.oscilloscope:
             self.logger.error("Oscilloscope is not connected.\n\t"
                               f"Resource name: {self.scope_address}")
             return None
+        
+        # Before reading the actual data,
+        # we must read the current state of the oscilloscope's parameters.
+        if update == True:
+            self.read_preamble()
 
         try:
 
@@ -217,48 +250,8 @@ class SDS814XHD:
             else:
                 self.logger.debug(f'Received an empty raw bitstream received')
 
-            # Retrieve the preamble block (e.g., scaling factors)
-            self.logger.debug('Requesting preamble with the oscilloscope parameters.')
-            self.oscilloscope.write(':WAV:PRE?')
-            preamble = self.oscilloscope.read_raw()
-            if len(preamble) > 0:
-                self.logger.debug(f'Preamble received: {len(preamble)}')
-            else:
-                self.logger.debug('Received an empty preamble string')
-
-            # The first 11 bits contain header (we don't need it)
-            n_skip = 11
-            # Retrieve parameters from the preamble
-            self.logger.debug('Unpacking the preamble bitstream.')
-            num_points = struct.unpack('l', preamble[n_skip+116:n_skip+119+1])[0] # Number of data points
-            # Extract scaling factors from the preamble
-            first_point = struct.unpack('l', preamble[n_skip+132:n_skip+135+1])[0] # The offset relative to the beginning of the trace buffer
-            data_interval = struct.unpack('l', preamble[n_skip+136:n_skip+139+1])[0] # Indicates the interval between data points for waveform transfer. Value is the same as the parameter of the :WAVeform:INTerval remote command.
-            read_frames = struct.unpack('l', preamble[n_skip+144:n_skip+147+1])[0] # number of sequence frames transferred this time. Used to calculate the reading times of sequence waveform
-            sum_frames = struct.unpack('l', preamble[n_skip+148:n_skip+151+1])[0] # sum_frames, number of sequence frames acquired. Used to calculate the reading times of sequence waveform
-            vertical_gain = struct.unpack('f', preamble[n_skip+156:n_skip+159+1])[0] # Vertical gain. The value of vertical scale without probe attenuation
-            vertical_offset = struct.unpack('f', preamble[n_skip+160:n_skip+163+1])[0] # The value of vertical offset without probe attenuation
-            code_per_div = struct.unpack('f', preamble[n_skip+164:n_skip+167+1])[0] # The value is different for different vertical gain of different models
-            adc_bit = struct.unpack('h', preamble[n_skip+172:n_skip+173+1])[0] # ADC bit
-            sequence_frame_idx = struct.unpack('h', preamble[n_skip+174:n_skip+175+1])[0] # The specified frame index of sequence set by the parameter <value1> of the command :WAVeform:SEQuence. Default Value is 1
-            horizontal_interval = struct.unpack('f', preamble[n_skip+176:n_skip+179+1])[0] # Horizontal interval. Sampling interval for time domain waveforms. Horizontal interval = 1/sampling rate.
-            horizontal_offset = struct.unpack('d', preamble[n_skip+180:n_skip+187+1])[0] #Horizontal offset. Trigger offset for the first sweep of the trigger, seconds between the trigger and the first data point. Unit is s.
-            timebase_idx = struct.unpack('h', preamble[n_skip+324:n_skip+325+1])[0] # Index of the timebase in the list 'timebase'
-            vertical_coupling_idx = struct.unpack('h', preamble[n_skip+326:n_skip+327+1])[0] # Vertical coupling. 0-DC,1-AC,2-GND
-            probe_attenuation = struct.unpack('f', preamble[n_skip+328:n_skip+331+1])[0] # Probe attenuation.
-            # fixed_vertical_gain has been skipped due to the presence of the 'vertical_gain' variable
-            bw_limit = struct.unpack('h', preamble[n_skip+334:n_skip+335+1])[0] # Bandwidth limit. 0-OFF,1-20M,2-200M
-            source_channel = struct.unpack('h', preamble[n_skip+344:n_skip+345+1])[0] # Wave source. 0-C1,1-C2,2-C3,3-C4,4-C5,5-C6,6-C7,7-C8
-            self.logger.debug('Unpacked the preamble bitstream.')
-
-
-            self.logger.debug(f'\n\tFirst point: {first_point}\n\t'
-                                f'Number of points: {num_points}\n\t'
-                                f'Data interval: {data_interval}\n\t'
-                                f'Frames read: {read_frames}')
-
             # Use timebase index to assign proper timebase set on the oscope panel
-            timebase = self.TIMEBASE_LIST[timebase_idx]
+            self.timebase = self.TIMEBASE_LIST[self.timebase_idx]
 
             num_digits = int(struct.unpack('c', raw_data[1:2])[0]) #
 
@@ -267,16 +260,10 @@ class SDS814XHD:
                                        offset=num_digits+2, 
                                        count=-1, 
                                        dtype=np.int16)
-            self.logger.debug(f"Raw values array hape:{len(raw_values)}")
-
-            # Convert to voltage and time values
-            horiz_grid_num = 10 # Specific for SDS800X HD model line
-            voltage_levels = np.array(raw_values, dtype=np.float32)
-            voltage_data = voltage_levels*(vertical_gain / code_per_div) - vertical_offset
-            time_data = horizontal_offset - 0.5*horiz_grid_num*timebase + np.arange(num_points)*horizontal_interval
             self.logger.info('Waveform data retrieved.')
-            self.logger.debug(f'Voltage and time array lengths: {len(voltage_data)}, {len(time_data)}')
-            return time_data, voltage_data
+            self.logger.debug(f"Raw values array have: {len(raw_values)} points")
+
+            return self._convert_data(raw_values)
 
         except pyvisa.VisaIOError as e:
             self.logger.error(f"Error retrieving waveform data.\n\t{e}")
