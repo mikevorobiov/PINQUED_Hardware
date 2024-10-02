@@ -1,8 +1,17 @@
+"""
+Module: SDS814XHD Oscilloscope Control
+Description: This module provides a class to interface with the Siglent SDS814XHD oscilloscope 
+             using pyvisa for data acquisition, setting channels, and waveform retrieval.
+
+Author: Mykhailo Vorobiov
+Email: mvorobiov@wm.edu
+Date: 2024-10-02
+"""
+
 import pyvisa
 import numpy as np
 import struct
 import logging
-
 
 class SDS814XHD:
     """A class for interfacing with the SDS814XHD oscilloscope."""
