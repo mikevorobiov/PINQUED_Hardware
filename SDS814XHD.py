@@ -17,10 +17,9 @@ class SDS814XHD:
                         1, 2, 5, 10, 20, 50, 100, 200, 500, 1000]
 
     def __init__(self, 
-                 resource_name, 
-                 log_level='INFO',
-                 log_format = '%(asctime)s [%(levelname)s] SDS814XHD: %(message)s',
-                 logger_obj=[] ):
+                 resource_name,
+                 alias = 'SDS814XHD',
+                 log_level='INFO'):
         """
         Initialize the oscilloscope class and establish connection.
 
@@ -28,11 +27,8 @@ class SDS814XHD:
         :param log_level: Level of logging for logger object.
         :logger_obj: Logger object
         """ 
-        self.LOG_FORMAT = log_format 
-        if logger_obj:
-            self.logger = logger_obj
-        else:
-            self.logger = logging.getLogger(__name__)
+        self.LOG_FORMAT = f'%(asctime)s [%(levelname)s] {alias}: %(message)s'
+        self.logger = logging.getLogger(__name__)
 
         logging.basicConfig(format = self.LOG_FORMAT, level=log_level)
         self.scope_address = resource_name
@@ -97,9 +93,16 @@ class SDS814XHD:
         :retrun: Returns 0 if the retrieval has been successful and 1 if ended with error.
         """
         # Validate the channel name
-        if not self.is_valid_channel(channel):
+        if self.is_valid_channel(channel):
+            try:
+                # Set the the specified channel as active channel
+                self.oscilloscope.write(f'WAV:SOUR {channel}')
+                self.logger.info(f"Active channel: {channel}")
+            except pyvisa.VisaIOError as e:
+                self.logger.error(f"Failed to set channel: {e}")
+        else:
             self.logger.warning(
-                f"Invalid channel '{channel}'. "
+                f"Invalid channel name '{channel}'. "
                 f"Valid channels are: {', '.join(self.VALID_CHANNELS)}."
             )
             try:
@@ -109,6 +112,7 @@ class SDS814XHD:
                     self.logger.warning(f"Falling back to the current active channel: {current_channel}.")
             except pyvisa.VisaIOError as e:
                 self.logger.error(f"Error retrieving the current channel: {e}")
+
                 
 
     def get_number_of_points(self):
