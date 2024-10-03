@@ -11,6 +11,7 @@ Date: 2024-10-02
 
 import pyvisa
 import logging
+import time
 
 
 class U1252B:
@@ -52,7 +53,7 @@ class U1252B:
         :return: Identifier string if query is successful, or None otherwise.
         """
         try:
-            return self.dmm.query('*IDN?')
+            return self.dmm.query('*IDN?\n')
         except pyvisa.VisaIOError as e:
             self.logger.error(f'Error retrieving identification of the digital multimeter: {e}')
             return None
@@ -64,13 +65,19 @@ class U1252B:
         :return: measurement reading.
         """
         try:
-            self.dmm.write("FETC?")
+            self.dmm.write("FETC?\n")
+            time.sleep(0.25)
             voltage = float(self.dmm.read())
             self.logger.info(f"Measurement: {voltage} V")
             return voltage
         except pyvisa.VisaIOError as e:
             self.logger.error(f"Error measuring DC voltage: {e}")
             return None
+        
+
+    def reset(self):
+        self.dmm.write('RST\n')
+        return 0
 
     def close(self):
         """
@@ -82,9 +89,3 @@ class U1252B:
                 self.logger.info("Connection to the digital multimeter closed.")
             except pyvisa.VisaIOError as e:
                 self.logger.error(f"Error closing connection to the multimeter: {e}")
-
-# Example usage (commented out):
-# dmm = DigitalMultimeter("USB0::0x1234::0x5678::INSTR")
-# voltage = dmm.measure_voltage_dc()
-# current = dmm.measure_current_dc()
-# dmm.close()
