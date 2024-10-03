@@ -5,7 +5,8 @@ Description: This module provides a class to interface with the Siglent SDS814XH
 
 Author: Mykhailo Vorobiov
 Email: mvorobiov@wm.edu
-Date: 2024-10-02
+Date Created: 2024-10-02
+Date Updated: 2024-10-02
 """
 
 import pyvisa
