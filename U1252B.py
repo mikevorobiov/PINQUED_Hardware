@@ -22,7 +22,7 @@ class U1252B:
     and resistance from a DMM using pyvisa communication.
     """
 
-    def __init__(self, resource_name, alias='DigitalMultimeter', log_level='INFO'):
+    def __init__(self, visa_rm, resource_address, alias='DigitalMultimeter', log_level='INFO'):
         """
         Initialize the Digital Multimeter class and establish a connection.
 
@@ -33,14 +33,12 @@ class U1252B:
         self.LOG_FORMAT = f'%(asctime)s [%(levelname)s] {alias}: %(message)s'
         self.logger = logging.getLogger(__name__)
         logging.basicConfig(format=self.LOG_FORMAT, level=log_level)
-        self.dmm_address = resource_name
 
         try:
-            self.rm = pyvisa.ResourceManager()
-            self.dmm = self.rm.open_resource(self.dmm_address)
+            self.dmm = visa_rm.open_resource(resource_address)
             self.dmm.timeout = 5000  # Set timeout to 5 seconds
             self.logger.info(f"Connection established with the digital multimeter."
-                             f"\n\tResource address: {self.dmm_address}"
+                             f"\n\tResource address: {resource_address}"
                              f'\n\tID: {self.get_idn()}')
         except pyvisa.VisaIOError as e:
             self.logger.error(f'Failed to connect to the digital multimeter.\n\t{e}')
@@ -53,7 +51,7 @@ class U1252B:
         :return: Identifier string if query is successful, or None otherwise.
         """
         try:
-            return self.dmm.query('*IDN?\n')
+            return self.dmm.query('*IDN?')
         except pyvisa.VisaIOError as e:
             self.logger.error(f'Error retrieving identification of the digital multimeter: {e}')
             return None
@@ -65,9 +63,9 @@ class U1252B:
         :return: measurement reading.
         """
         try:
-            self.dmm.write("FETC?\n")
-            time.sleep(0.25)
-            voltage = float(self.dmm.read())
+            voltage = self.dmm.query("READ?")
+            #time.sleep(0.25)
+            #voltage = float(self.dmm.read())
             self.logger.info(f"Measurement: {voltage} V")
             return voltage
         except pyvisa.VisaIOError as e:
