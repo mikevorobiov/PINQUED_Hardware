@@ -33,7 +33,7 @@ grid_current = []
 
 psu.toggle_output(True)
 
-voltage = np.round( np.linspace(0,1,40)**2 * 30, decimals=2)
+voltage = np.round( np.linspace(0, 1, 40)**2 * 30, decimals=2)
 try:
     for v in voltage:
         psu.set_voltage(v)
