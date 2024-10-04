@@ -20,7 +20,7 @@ class GPP25045():
     """
 
 
-    def __init__(self, resource_name, alias='GPP250-4.5', log_level='INFO'):
+    def __init__(self, visa_rm, resource_address, alias='GPP250-4.5', log_level='INFO'):
         """
         Initialize the PSU class and establish connection.
 
@@ -31,17 +31,15 @@ class GPP25045():
         self.LOG_FORMAT = f'%(asctime)s [%(levelname)s] {alias}: %(message)s'
         self.logger = logging.getLogger(__name__)
         logging.basicConfig(format=self.LOG_FORMAT, level=log_level)
-        self.psu_address = resource_name
 
-        self.MAX_CURRENT = 10.0 # Amp
-        self.MAX_VOLTAGE = 36.0 # Volt
+        self.MAX_CURRENT = 4.5 # Amp
+        self.MAX_VOLTAGE = 100.0 # Volt
 
         try:
-            self.rm = pyvisa.ResourceManager()
-            self.psu = self.rm.open_resource(self.psu_address)
+            self.psu = visa_rm.open_resource(resource_address)
             self.psu.timeout = 3000
             self.logger.info(f"Connection established with the GW INSTEK GPP250-4.5 PSU."
-                             f"\n\tResource address: {self.psu_address}"
+                             f"\n\tResource address: {resource_address}"
                              f'\n\tID: {self.get_idn()}')
             self.toggle_output(False)
         except pyvisa.VisaIOError as e:
