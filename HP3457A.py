@@ -7,12 +7,7 @@ Description: This module provides a class to interface with a digital multimeter
 Author: Mykhailo Vorobiov
 Email: mvorobiov@wm.edu
 Date: 2024-10-02
-
-
-THIS CLASS DOES NOT COMMUNICATE WITH THE 
-APPROPRIATE DMM PROPERLY.
-I DON'T KNOW IF THE ISSUE IS ON THE SOFTWARE OR
-HARDWARE SIDE.
+Updated: 2024-10-08
 """
 
 import pyvisa
@@ -26,6 +21,79 @@ class HP3457A:
     This class allows you to measure DC voltage, AC voltage, DC current, AC current,
     and resistance from a DMM using pyvisa communication.
     """
+
+    # List of data return formats
+    FORMATS = ['ASCII', 
+               'SINT', 
+               'DINT', 
+               'SREAL', 
+               'DREAL'
+               ]
+    
+    BEEPER_STATUS = ['ON','OFF','ONCE']
+
+    # List of functions
+    FUNCTIONS = ['DCV',
+                 'ACV',
+                 'ACDCV',
+                 'OHM',
+                 'OHMF',
+                 'DCI',
+                 'ACI',
+                 'ACDCI',
+                 'FREQ',
+                 'PER'
+                ]
+    
+    # DC Volts Spec
+    DCV_RES = {'30mv': {'6.5': 10e-9, '5.5': 100e-9, '4.5': 1e-6, '3.5': 10e-6},
+                    '300mv': {'6.5': 100e-9, '5.5': 1e-6, '4.5': 10e-6, '3.5': 100e-6},
+                    '3v': {'6.5': 1e-6, '5.5': 10e-6, '4.5': 100e-6, '3.5': 1e-3},
+                    '30v': {'6.5': 10e-6, '5.5': 100e-6, '4.5': 1e-3, '3.5': 10e-3},
+                    '300v': {'6.5': 100e-6, '5.5': 1e-3, '4.5': 10e-3, '3.5': 100e-3}
+                    }
+    
+    DCV_ACC = {'30mv': {'100': {'acc': .0045, 'counts': 365}, '10': {'acc': .0045, 'counts': 385},
+                    '1': {'acc': .0045, 'counts': 500}, '.1': {'acc': .0045, 'counts': 70},
+                    '.005': {'acc': .0045, 'counts': 19}, '.0005': {'acc': .0045, 'counts': 6}},
+                    '300mv': {'100': {'acc': .0035, 'counts': 39}, '10': {'acc': .0035, 'counts': 40},
+                    '1': {'acc': .0035, 'counts': 50}, '.1': {'acc': .0035, 'counts': 9},
+                    '.005': {'acc': .0035, 'counts': 4}, '.0005': {'acc': .0035, 'counts': 4}},
+                    '3v': {'100': {'acc': .0025, 'counts': 6}, '10': {'acc': .0025, 'counts': 7},
+                    '1': {'acc': .0025, 'counts': 7}, '.1': {'acc': .0025, 'counts': 4},
+                    '.005': {'acc': .0025, 'counts': 4}, '.0005': {'acc': .0025, 'counts': 4}},
+                    '30v': {'100': {'acc': .0040, 'counts': 19}, '10': {'acc': .0040, 'counts': 20},
+                    '1': {'acc': .0040, 'counts': 30}, '.1': {'acc': .0040, 'counts': 7},
+                    '.005': {'acc': .0040, 'counts': 4}, '.0005': {'acc': .0040, 'counts': 4}},
+                    '300v': {'100': {'acc': .0055, 'counts': 6}, '10': {'acc': .0055, 'counts': 7},
+                    '1': {'acc': .0055, 'counts': 7}, '.1': {'acc': .0055, 'counts': 4},
+                    '.005': {'acc': .0055, 'counts': 4}, '.0005': {'acc': .0055, 'counts': 4}}
+                    }
+    
+    # DC Current Spec
+    DCI_RES = {'300ua': {'6.5': 100e-12, '5.5': 1e-9, '4.5': 10e-9, '3.5': 100e-9},
+                    '3ma': {'6.5': 1e-9, '5.5': 10e-9, '4.5': 100e-9, '3.5': 1e-6},
+                    '30ma': {'6.5': 10e-9, '5.5': 100e-9, '4.5': 1e-6, '3.5': 10e-6},
+                    '300ma': {'6.5': 100e-9, '5.5': 1e-6, '4.5': 10e-6, '3.5': 100e-6},
+                    '1a': {'6.5': 1e-6, '5.5': 10e-6, '4.5': 100e-6, '3.5': 1e-3}
+                    }
+    
+    DCI_ACC = {'300ua': {'100': {'acc': .04, 'counts': 104}, '10': {'acc': .04, 'counts': 104},
+                    '1': {'acc': .04, 'counts': 115}, '.1': {'acc': .04, 'counts': 14},
+                    '.005': {'acc': .04, 'counts': 5}, '.0005': {'acc': .04, 'counts': 4}},
+                    '3ma': {'100': {'acc': .04, 'counts': 104}, '10': {'acc': .04, 'counts': 104},
+                    '1': {'acc': .04, 'counts': 115}, '.1': {'acc': .04, 'counts': 14},
+                    '.005': {'acc': .04, 'counts': 5}, '.0005': {'acc': .04, 'counts': 4}},
+                    '30ma': {'100': {'acc': .04, 'counts': 104}, '10': {'acc': .04, 'counts': 104},
+                    '1': {'acc': .04, 'counts': 115}, '.1': {'acc': .04, 'counts': 14},
+                    '.005': {'acc': .04, 'counts': 5}, '.0005': {'acc': .04, 'counts': 4}},
+                    '300ma': {'100': {'acc': .08, 'counts': 204}, '10': {'acc': .08, 'counts': 204},
+                    '1': {'acc': .08, 'counts': 215}, '.1': {'acc': .08, 'counts': 24},
+                    '.005': {'acc': .08, 'counts': 6}, '.0005': {'acc': .08, 'counts': 4}},
+                    '1a': {'100': {'acc': .08, 'counts': 604}, '10': {'acc': .08, 'counts': 604},
+                    '1': {'acc': .08, 'counts': 615}, '.1': {'acc': .08, 'counts': 64},
+                    '.005': {'acc': .08, 'counts': 10}, '.0005': {'acc': .08, 'counts': 5}}
+                    }
 
     def __init__(self, resource_name, alias='DigitalMultimeter', log_level='INFO'):
         """
@@ -58,102 +126,84 @@ class HP3457A:
         :return: Identifier string if query is successful, or None otherwise.
         """
         try:
-            return self.dmm.query('*IDN?')
+            self.dmm.write('ID?')
+            return self.dmm.read_bytes(9).decode().strip()
         except pyvisa.VisaIOError as e:
             self.logger.error(f'Error retrieving identification of the digital multimeter: {e}')
             return None
+    
+    def _check_format(self, format):
+        if format in self.FORMATS:
+            return True
+        else:
+            return False
+        
+    def set_format(self, format='ASCII'):
+        if self._check_format(format):
+            try:
+                self.dmm.write(f'OFORMAT\\s{format};')
+                self.logger.info(f'Format  has been set to {format}')
+            except pyvisa.VisaIOError as e:
+                self.logger.error(f'Couldn\'t set reading format to {format}: {e}')
+        else:
+            self.logger.warning(f'Entered format is not allowed. Allowed formats: {self.FORMATS}')
 
-    def measure_voltage_dc(self):
-        """
-        Measure DC voltage.
-
-        :return: DC voltage reading.
-        """
+    def get_reading(self):
         try:
-            self.dmm.write("MEAS:VOLT:DC?")
-            voltage = float(self.dmm.read())
-            self.logger.info(f"DC Voltage measured: {voltage} V")
-            return voltage
+            self.dmm.write(f'TARM\\sAUTO')
+            return float(self.dmm.read_bytes(16).decode().strip())
         except pyvisa.VisaIOError as e:
-            self.logger.error(f"Error measuring DC voltage: {e}")
-            return None
+            self.logger.error(f'Error failed to get reading: {e}')
 
-    def measure_voltage_ac(self):
-        """
-        Measure AC voltage.
+    def set_beeper_status(self, status='OFF'):
+        if status in self.BEEPER_STATUS:
+            try:
+                self.dmm.write(f'BEEP\\s{status}')
+                self.logger.info(f'Beeper is set to {status}')
+            except pyvisa.VisaIOError as e:
+                self.logger.error(f'Error setting beeper status: {e}')
+        else:
+            self.logger.warning(f'Warning! The passed beeper status is not allowed.'
+                                f'Choose from {self.BEEPER_STATUS}')
 
-        :return: AC voltage reading.
-        """
-        try:
-            self.dmm.write("MEAS:VOLT:AC?")
-            voltage = float(self.dmm.read())
-            self.logger.info(f"AC Voltage measured: {voltage} V")
-            return voltage
-        except pyvisa.VisaIOError as e:
-            self.logger.error(f"Error measuring AC voltage: {e}")
-            return None
-
-    def measure_current_dc(self):
-        """
-        Measure DC current.
-
-        :return: DC current reading.
-        """
-        try:
-            self.dmm.write("MEAS:CURR:DC?")
-            current = float(self.dmm.read())
-            self.logger.info(f"DC Current measured: {current} A")
-            return current
-        except pyvisa.VisaIOError as e:
-            self.logger.error(f"Error measuring DC current: {e}")
-            return None
-
-    def measure_current_ac(self):
-        """
-        Measure AC current.
-
-        :return: AC current reading.
-        """
-        try:
-            self.dmm.write("MEAS:CURR:AC?")
-            current = float(self.dmm.read())
-            self.logger.info(f"AC Current measured: {current} A")
-            return current
-        except pyvisa.VisaIOError as e:
-            self.logger.error(f"Error measuring AC current: {e}")
-            return None
-
-    def measure_resistance(self):
-        """
-        Measure resistance.
-
-        :return: Resistance reading.
-        """
-        try:
-            self.dmm.write("MEAS:RES?")
-            resistance = float(self.dmm.read())
-            self.logger.info(f"Resistance measured: {resistance} Ohms")
-            return resistance
-        except pyvisa.VisaIOError as e:
-            self.logger.error(f"Error measuring resistance: {e}")
-            return None
-
-    def set_function(self, function):
+    def set_function(self, function='DCV'):
         """
         Set the measurement function of the multimeter.
 
-        :param function: Measurement function (e.g., "VOLT:DC", "VOLT:AC", "CURR:DC", "RES").
+        :param function: Measurement function .
         """
-        valid_functions = ["VOLT:DC", "VOLT:AC", "CURR:DC", "CURR:AC", "RES"]
-        if function in valid_functions:
+        if function in self.FUNCTIONS:
             try:
-                self.dmm.write(f"FUNC '{function}'")
+                self.dmm.write(f"FUNC\\s{function}")
                 self.logger.info(f"Measurement function set to {function}")
             except pyvisa.VisaIOError as e:
                 self.logger.error(f"Error setting measurement function: {e}")
         else:
             self.logger.warning(f"Invalid measurement function '{function}'. "
-                                f"Valid functions are: {', '.join(valid_functions)}")
+                                f"Valid functions are: {', '.join(self.FUNCTIONS)}")
+
+    def get_temperature(self):
+        try:
+            self.dmm.write("TEMP?")
+            temp = float(self.dmm.read(16).decode().strip())
+            self.logger.info(f"DMM's internal temperature is: {temp}")
+            return temp
+        except pyvisa.VisaIOError as e:
+            self.logger.error(f"Error retrieving DMM's internal temperature: {e}")
+
+    def toggle_keyboard(self, status=True):
+        if status:
+            try:
+                self.dmm.write("LOCK\\sON")
+                self.logger.info(f"DMM's keyboard is unlocked.")
+            except pyvisa.VisaIOError as e:
+                self.logger.error(f"Error unlocking the DMM's keyboard: {e}")
+        else:
+            try:
+                self.dmm.write("LOCK\\sOFF")
+                self.logger.info(f"DMM's keyboard is locked.")
+            except pyvisa.VisaIOError as e:
+                self.logger.error(f"Error locking the DMM's keyboard: {e}")
 
     def close(self):
         """
@@ -166,8 +216,13 @@ class HP3457A:
             except pyvisa.VisaIOError as e:
                 self.logger.error(f"Error closing connection to the multimeter: {e}")
 
-# Example usage (commented out):
-# dmm = DigitalMultimeter("USB0::0x1234::0x5678::INSTR")
-# voltage = dmm.measure_voltage_dc()
-# current = dmm.measure_current_dc()
-# dmm.close()
+
+# Example usage
+if __name__ == "__main__":
+    rm = pyvisa.ResourceManager()
+    dmm = HP3457A("visa://192.168.194.15/GPIB1::22::INSTR")
+    dmm.set_format('ASCII')
+    dmm.set_beeper_status('ONCE')
+    dmm.set_function('DCV')
+    print(dmm.get_reading())
+    dmm.close()
