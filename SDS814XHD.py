@@ -14,6 +14,8 @@ import numpy as np
 import struct
 import logging
 
+from scipy import signal
+
 class SDS814XHD:
     """A class for interfacing with the SDS814XHD oscilloscope."""
 
@@ -158,6 +160,13 @@ class SDS814XHD:
         except pyvisa.VisaIOError as e:
             self.logger.error(f'Error retrieving the preamble: {e}')
     
+    def preamble_as_comments(self):
+        preamble_dict = self.get_preamble_dict()
+        comments_string = ''
+        for key, value in preamble_dict.items():
+            comments_string += '# ' + key + ': ' + str(value) + '\n'
+        return comments_string
+
     def get_preamble_dict(self):
         """
         Form a dictionary from the oscilloscope parameters after reading the preamble.
@@ -193,21 +202,24 @@ class SDS814XHD:
         :param raw_values: A bitstream of raw waveform values.
         :return: Two arrays of time samples and voltage samples.
         """
-        if raw_values.size > 0:
+        if len(raw_values) > 0:
             horizontal_grid_num = 10  # Specific for SDS800X HD model line
             voltage_levels = np.array(raw_values, dtype=np.float32)
             voltage_data = (voltage_levels * (self.vertical_gain / self.code_per_div) 
                             - self.vertical_offset)
+            #time_data = (self.horizontal_offset 
+            #             - 0.5 * horizontal_grid_num * self.timebase 
+            #             + np.arange(self.num_points) * self.horizontal_interval)
             time_data = (self.horizontal_offset 
                          - 0.5 * horizontal_grid_num * self.timebase 
-                         + np.arange(self.num_points) * self.horizontal_interval)
+                         + np.arange(len(voltage_levels)) * self.horizontal_interval)
             self.logger.debug('Conversion successful.')
             return time_data, voltage_data
         else:
             self.logger.error('Raw data conversion failed: empty bitstream.')
             return None
 
-    def get_waveform(self, update=True):
+    def get_waveform(self, update=True, decimate=True):
         """
         Retrieve waveform data from the selected channel.
 
@@ -225,6 +237,7 @@ class SDS814XHD:
             self.oscilloscope.write(':WAV:WIDT WORD')  # Set to 16-bit words
             self.logger.debug('Set data format to 16-bit words.')
 
+            self.oscilloscope.write(':WAV:SEQ 2,1')
             self.oscilloscope.write(':WAV:DATA?')
             self.logger.debug('Requested waveform data.')
 
@@ -254,3 +267,28 @@ class SDS814XHD:
 
 
 
+# Example usage
+if __name__ == "__main__":
+    import matplotlib.pyplot as plt
+
+    rm = pyvisa.ResourceManager()
+    dmm = SDS814XHD("TCPIP0::192.168.110.191::inst0::INSTR")
+    
+    dmm.set_channel('C3')
+    time_c1, voltage_c1 = dmm.get_waveform()
+    print(dmm.get_preamble_dict())
+
+    dmm.set_channel('C2')
+    time_c2, voltage_c2 = dmm.get_waveform()
+    print(dmm.get_preamble_dict())
+
+    plt.plot(time_c1, voltage_c1)
+    plt.plot(time_c2, voltage_c2)
+    plt.show()
+
+    header_str = 'Time c1 (s), Signal c1 (V), Time c2 (s), Signal c2 (V)'
+    data = np.transpose([time_c1, voltage_c1, time_c2, voltage_c2])
+    comments = dmm.preamble_as_comments()
+
+    #np.savetxt('./data.csv', data, header=header_str, delimiter=',', comments=comments)
+    dmm.close()
